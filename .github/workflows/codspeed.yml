@@ -47,22 +47,22 @@ jobs:
         # The two stale segment benches (`sparse_index_build`, `sparse_vector_storage`)
         # are omitted as they do not compile against the current API.
         run: |
-          cargo codspeed build -p common \
+          cargo codspeed build -m simulation -p common \
             --bench bitpacking --bench mmap_hashmap --bench hw_counter \
             --bench atomic_stop --bench universal_io
-          cargo codspeed build -p wal --bench benchmark
-          cargo codspeed build -p gridstore \
+          cargo codspeed build -m simulation -p wal --bench benchmark
+          cargo codspeed build -m simulation -p gridstore \
             --bench random_data_bench --bench real_data_bench --bench bitmask_bench \
             --bench bustle_bench --bench flush_bench
-          cargo codspeed build -p trififo --bench cache_comparison
-          cargo codspeed build -p quantization \
+          cargo codspeed build -m simulation -p trififo --bench cache_comparison
+          cargo codspeed build -m simulation -p quantization \
             --bench encode --bench pq --bench binary --bench p_square \
             --bench hadamard --bench turboquant --bench turbo_simd
-          cargo codspeed build -p sparse --bench search
-          cargo codspeed build -p shard --bench find_duplicated_points
-          cargo codspeed build -p collection \
+          cargo codspeed build -m simulation -p sparse --bench search
+          cargo codspeed build -m simulation -p shard --bench find_duplicated_points
+          cargo codspeed build -m simulation -p collection \
             --bench hash_ring_bench --bench batch_search_bench --bench batch_query_bench
-          cargo codspeed build -p segment \
+          cargo codspeed build -m simulation -p segment \
             --bench vector_search --bench hnsw_build_graph --bench hnsw_search_graph \
             --bench conditional_search --bench dynamic_mmap_flags --bench hnsw_build_asymptotic \
             --bench serde_formats --bench id_type_benchmark --bench map_benchmark \
@@ -74,4 +74,4 @@ jobs:
         uses: CodSpeedHQ/action@f99becdce5e5d51fd556489ebef684f4ecfd6286 # v4
         with:
           mode: simulation
-          run: cargo codspeed run
+          run: cargo codspeed run --workspace
