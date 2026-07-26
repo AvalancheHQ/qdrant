@@ -44,21 +44,30 @@ jobs:
         # Benchmarks are built per package with explicit `--bench` flags because some
         # crates carry helper files in `benches/` (e.g. `prof.rs`, `fixture.rs`) that
         # use the default test harness, which cargo-codspeed cannot instrument.
-        # The two stale segment benches (`sparse_index_build`, `sparse_vector_storage`)
-        # are omitted as they do not compile against the current API.
+        #
+        # Some benchmarks are intentionally excluded:
+        #  - `segment/sparse_index_build` and `segment/sparse_vector_storage` do not
+        #    compile against the current API (pre-existing staleness).
+        #  - `gridstore/real_data_bench`, `segment/sparse_index_search` and
+        #    `sparse/search` download large external datasets at runtime (they rely on
+        #    `$CARGO`/`cargo metadata`), which is not available when CodSpeed executes
+        #    the pre-built benchmark binaries, so they are not suitable for CI here.
+        #  - `gridstore/flush_bench`, `gridstore/bustle_bench` and
+        #    `segment/in_memory_id_tracker` use custom iteration counts / a custom
+        #    harness that CodSpeed cannot instrument (they yield no measurements).
+        #  - `quantization/pq` is prohibitively slow under CPU simulation (KMeans
+        #    training on 100k x 1024-dim vectors during setup) and would time out.
         run: |
           cargo codspeed build -m simulation -p common \
             --bench bitpacking --bench mmap_hashmap --bench hw_counter \
             --bench atomic_stop --bench universal_io
           cargo codspeed build -m simulation -p wal --bench benchmark
           cargo codspeed build -m simulation -p gridstore \
-            --bench random_data_bench --bench real_data_bench --bench bitmask_bench \
-            --bench bustle_bench --bench flush_bench
+            --bench random_data_bench --bench bitmask_bench
           cargo codspeed build -m simulation -p trififo --bench cache_comparison
           cargo codspeed build -m simulation -p quantization \
-            --bench encode --bench pq --bench binary --bench p_square \
+            --bench encode --bench binary --bench p_square \
             --bench hadamard --bench turboquant --bench turbo_simd
-          cargo codspeed build -m simulation -p sparse --bench search
           cargo codspeed build -m simulation -p shard --bench find_duplicated_points
           cargo codspeed build -m simulation -p collection \
             --bench hash_ring_bench --bench batch_search_bench --bench batch_query_bench
@@ -66,9 +75,9 @@ jobs:
             --bench vector_search --bench hnsw_build_graph --bench hnsw_search_graph \
             --bench conditional_search --bench dynamic_mmap_flags --bench hnsw_build_asymptotic \
             --bench serde_formats --bench id_type_benchmark --bench map_benchmark \
-            --bench boolean_filtering --bench numeric_index_check_values --bench sparse_index_search \
+            --bench boolean_filtering --bench numeric_index_check_values \
             --bench multi_vector_search --bench metrics --bench range_filtering \
-            --bench in_memory_id_tracker --bench buffered_update_bitslice --bench segment_info \
+            --bench buffered_update_bitslice --bench segment_info \
             --bench hnsw_incremental_build
       - name: Run the benchmarks
         uses: CodSpeedHQ/action@f99becdce5e5d51fd556489ebef684f4ecfd6286 # v4
