@@ -57,9 +57,10 @@ jobs:
         #    custom harness / custom iteration counts (the latter is a clap-driven
         #    binary that requires `--dimensions`/`--dataset` at runtime), which
         #    CodSpeed cannot instrument when running the pre-built binaries.
-        #  - `quantization/pq` (KMeans training on 100k x 1024-dim vectors) and
-        #    `segment/hnsw_build_asymptotic` (builds an HNSW graph over ~1M vectors)
-        #    are prohibitively slow under CPU simulation and would run for hours.
+        #  - `quantization/pq` (KMeans training on 100k x 1024-dim vectors),
+        #    `segment/hnsw_build_asymptotic` and `segment/hnsw_search_graph` (both
+        #    build an HNSW graph over ~1M vectors during setup) are prohibitively slow
+        #    under CPU simulation and would run for hours.
         run: |
           cargo codspeed build -m simulation -p common \
             --bench bitpacking --bench mmap_hashmap --bench hw_counter \
@@ -75,7 +76,7 @@ jobs:
           cargo codspeed build -m simulation -p collection \
             --bench hash_ring_bench --bench batch_search_bench --bench batch_query_bench
           cargo codspeed build -m simulation -p segment \
-            --bench vector_search --bench hnsw_build_graph --bench hnsw_search_graph \
+            --bench vector_search --bench hnsw_build_graph \
             --bench conditional_search --bench dynamic_mmap_flags \
             --bench serde_formats --bench id_type_benchmark --bench map_benchmark \
             --bench boolean_filtering --bench numeric_index_check_values \
