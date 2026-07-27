@@ -1,0 +1,89 @@
+name: CodSpeed
+
+on:
+  push:
+    branches: [ master, dev ]
+  pull_request:
+    branches: [ '**' ]
+  # `workflow_dispatch` allows CodSpeed to trigger backtest
+  # performance analysis in order to generate initial data.
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+  id-token: write # for OpenID Connect authentication with CodSpeed
+
+jobs:
+  benchmarks:
+    name: Run benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - name: Install Protoc
+        uses: ./.github/actions/setup-protoc
+      - name: Install mold
+        uses: rui314/setup-mold@9c9c13bf4c3f1adef0cc596abc155580bcb04444 # v1
+      - name: Enable mold
+        run: |
+          mkdir -p .cargo
+          echo "[target.x86_64-unknown-linux-gnu]" >> .cargo/config.toml
+          echo "linker = \"clang\"" >> .cargo/config.toml
+          echo "rustflags = [\"-C\", \"link-arg=-fuse-ld=/usr/local/bin/mold\"]" >> .cargo/config.toml
+        shell: bash
+      - name: Install cargo-codspeed
+        uses: taiki-e/install-action@3a0adc33ab45d7b9b9da91822dd2b3c0151704be # cargo-codspeed
+        with:
+          tool: cargo-codspeed
+      - name: Build the benchmark targets
+        # Benchmarks are built per package with explicit `--bench` flags because some
+        # crates carry helper files in `benches/` (e.g. `prof.rs`, `fixture.rs`) that
+        # use the default test harness, which cargo-codspeed cannot instrument.
+        #
+        # Some benchmarks are intentionally excluded:
+        #  - `segment/sparse_index_build` and `segment/sparse_vector_storage` do not
+        #    compile against the current API (pre-existing staleness).
+        #  - `gridstore/real_data_bench`, `segment/sparse_index_search` and
+        #    `sparse/search` download large external datasets at runtime (they rely on
+        #    `$CARGO`/`cargo metadata`), which is not available when CodSpeed executes
+        #    the pre-built benchmark binaries, so they are not suitable for CI here.
+        #  - `gridstore/flush_bench`, `gridstore/bustle_bench`,
+        #    `segment/in_memory_id_tracker` and `segment/hnsw_incremental_build` use a
+        #    custom harness / custom iteration counts (the latter is a clap-driven
+        #    binary that requires `--dimensions`/`--dataset` at runtime), which
+        #    CodSpeed cannot instrument when running the pre-built binaries.
+        #  - `quantization/pq` (KMeans training on 100k x 1024-dim vectors),
+        #    `segment/hnsw_build_asymptotic` and `segment/hnsw_search_graph` (both
+        #    build an HNSW graph over ~1M vectors during setup) are prohibitively slow
+        #    under CPU simulation and would run for hours.
+        run: |
+          cargo codspeed build -m simulation -p common \
+            --bench bitpacking --bench mmap_hashmap --bench hw_counter \
+            --bench atomic_stop --bench universal_io
+          cargo codspeed build -m simulation -p wal --bench benchmark
+          cargo codspeed build -m simulation -p gridstore \
+            --bench random_data_bench --bench bitmask_bench
+          cargo codspeed build -m simulation -p trififo --bench cache_comparison
+          cargo codspeed build -m simulation -p quantization \
+            --bench encode --bench binary --bench p_square \
+            --bench hadamard --bench turboquant --bench turbo_simd
+          cargo codspeed build -m simulation -p shard --bench find_duplicated_points
+          cargo codspeed build -m simulation -p collection \
+            --bench hash_ring_bench --bench batch_search_bench --bench batch_query_bench
+          cargo codspeed build -m simulation -p segment \
+            --bench vector_search --bench hnsw_build_graph \
+            --bench conditional_search --bench dynamic_mmap_flags \
+            --bench serde_formats --bench id_type_benchmark --bench map_benchmark \
+            --bench boolean_filtering --bench numeric_index_check_values \
+            --bench multi_vector_search --bench metrics --bench range_filtering \
+            --bench buffered_update_bitslice --bench segment_info
+      - name: Run the benchmarks
+        uses: CodSpeedHQ/action@f99becdce5e5d51fd556489ebef684f4ecfd6286 # v4
+        with:
+          mode: simulation
+          run: cargo codspeed run --workspace
